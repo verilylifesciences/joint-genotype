@@ -1,0 +1,18 @@
+SHARDER
+
+BUILDING
+
+First build the non-Maven dependencies:
+
+$ ./install-genomewarp.sh
+$ cd ../mindexer
+$ mvn install
+$ cd ../sharder
+
+Then build Sharder:
+
+$ mvn package
+
+RUNNING
+
+$ java -jar target/Sharder-1.0-SNAPSHOT-jar-with-dependencies.jar

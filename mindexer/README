@@ -1,0 +1,9 @@
+MINDEXER
+
+BUILDING
+
+$ mvn package
+
+RUNNING
+
+$ java -jar target/Mindexer-1.0-SNAPSHOT-jar-with-dependencies.jar
