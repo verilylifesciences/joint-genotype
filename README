@@ -1,0 +1,19 @@
+Joint Genotyping
+
+BUILDING
+
+Follow the instructions in each folder
+
+RUNNING
+
+1) Run shards_picker to pick the tentative shard boundaries given your chosen
+   number of shards. 
+   I suggest picking the shards such that each shard has total size on the order
+   of the amount of memory available in your machines.
+
+2) Run mindexer on each input's index. This can be done in parallel.
+
+3) Run Sharder and GATK GenotypeGVCF for each shard. This can be done in parallel.
+
+4) Concatenate the GenotypeGVCF outputs. The resulting file is your final
+   output.
