@@ -79,6 +79,7 @@
         </executions>
       </plugin>
 
+
       <!-- boilerplate for installing to the local repository with 'mvn install' -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -86,7 +87,7 @@
         <version>2.5.2</version>
         <executions>
           <execution>
-            <phase>initialize</phase>
+            <phase>install</phase>
             <goals>
               <goal>install-file</goal>
             </goals>

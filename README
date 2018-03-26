@@ -11,7 +11,14 @@ RUNNING
    I suggest picking the shards such that each shard has total size on the order
    of the amount of memory available in your machines.
 
+The resulting output is the "shards file". Keep it locally, it's an input to
+the Sharder.
+
 2) Run mindexer on each input's index. This can be done in parallel.
+
+The resulting outputs are the "mindexes". Keep them on Google Cloud Storage.
+Write a file that lists the mindexes in order. This is the "mindex file", it's
+an input to the Sharder.
 
 3) Run Sharder and GATK GenotypeGVCF for each shard. This can be done in parallel.
 

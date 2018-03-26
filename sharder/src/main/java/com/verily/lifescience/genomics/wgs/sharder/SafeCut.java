@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -40,28 +41,35 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public class SafeCut implements AutoCloseable {
 
-  /** A reader for each input VCF. */
-  private final ImmutableList<VcfReader> vcfs;
+  private final ImmutableList<Path> variantsPath;
+  /** A reader for each input VCF. Set by init. */
+  private VcfReader[] vcfs;
   /** Contents of the shards file. */
   private final ImmutableList<Position> positions;
   /** The contigs listed in the shards file. */
   private final ImmutableMap<String, Integer> contigs;
   /** Each input VCF's corresponding mindex. */
   private final ImmutableList<Mindex> mindexes;
+  /** The reference for the vcfs. */
+  private final Reference reference;
   /** True iff init() was called. */
-  private boolean initialized = false;
+  private boolean initialized;
+  /** Turn on for extra info only relevant for debugging. */
+  private boolean verbose;
   /** Where we're currently thinking of cutting. only null until init is called. */
   @MonotonicNonNull private Position tentativePos;
 
   private final int threads;
 
   /** Loads the shards file, stores other paths. */
-  public SafeCut(Path shards, List<Path> mindexPaths, List<Path> variantsPaths, int threads,
+  public SafeCut(Path shards, List<Path> mindexPaths, ImmutableList<Path> variantsPaths, int threads,
       Reference reference) throws IOException, ParseException {
     checkArgument(
         mindexPaths.size() == variantsPaths.size(),
         "Arrays must have the same length.");
     this.threads = threads;
+    this.variantsPath = variantsPaths;
+    this.reference = reference;
     contigs = Position.contigsFromFile(shards);
     positions = Position.fromFile(shards, contigs);
     ImmutableList.Builder<Mindex> mindexBuilder = ImmutableList.builder();
@@ -69,12 +77,13 @@ public class SafeCut implements AutoCloseable {
       mindexBuilder.add(new Mindex(p));
     }
     mindexes = mindexBuilder.build();
-    ImmutableList.Builder<VcfReader> vcfBuilder = ImmutableList.builder();
-    for (Path p : variantsPaths) {
-      vcfBuilder.add(new VcfReader(p, contigs, reference));
-    }
-    this.vcfs = vcfBuilder.build();
     initialized = false;
+  }
+
+  /** set verbose flag **/
+  public SafeCut setVerbose(boolean verbose) {
+    this.verbose = verbose;
+    return this;
   }
 
   public int numShards() {
@@ -99,45 +108,63 @@ public class SafeCut implements AutoCloseable {
    */
   @EnsuresNonNull("this.tentativePos")
   public void init(int shardNo) throws IOException, InterruptedException {
-    tentativePos = positions.get(shardNo);
-    ExecutorService exec;
-    if (threads > 1) {
-      // These threads mostly just block, waiting on IO - so allocate more
-      // than we have processors. The workStrealingPool works too, but not as well.
-      // We're using daemon threads because we want the program to quit if the main thread exits,
-      // as may happen in case of error.
-      exec = Executors.newFixedThreadPool(32, new ThreadFactoryBuilder().setDaemon(true).build());
+    if (null == this.vcfs) {
+      vcfs = new VcfReader[variantsPath.size()];
     } else {
-      exec = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true).build());
-    }
-    List<Future<Boolean>> done = new ArrayList<>();
-    for (int i = 0; i < vcfs.size(); i++) {
-      final int j = i;
-      done.add(exec.submit(() -> initializeVcf(j, shardNo)));
-    }
-    // wait for all tasks to be done, check for exceptions.
-    for (Future<Boolean> d : done) {
-      try {
-        d.get();
-      } catch (ExecutionException e) {
-        Throwable inner = e.getCause();
-        if (inner instanceof IOException) {
-          throw (IOException) inner;
-        }
-        throw new RuntimeException("Unexpected exception while initializing", e);
+      if (verbose) {
+        System.out.println("Reusing already-open VCFs");
       }
     }
-
-    exec.shutdown();
-    exec.awaitTermination(10, TimeUnit.SECONDS);
+    tentativePos = positions.get(shardNo);
+    ExecutorService exec;
+    // only do a limited number of tasks on the executor before we make a new one:
+    // this works around a bug where we'd run out of thread-local space otherwise
+    // (at around task #1000).
+    int step = 250;
+    for (int start=0; start < vcfs.length; start += step) {
+      if (threads > 1) {
+        // These threads mostly just block, waiting on IO - so allocate more
+        // than we have processors. The workStealingPool works too, but not as well.
+        // We're using daemon threads because we want the program to quit if the main thread exits,
+        // as may happen in case of error.
+        exec = Executors.newFixedThreadPool(32, new ThreadFactoryBuilder().setDaemon(true).build());
+      } else {
+        exec = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true).build());
+      }
+      int end = Math.min(start + step, vcfs.length);
+      List<Future<Boolean>> done = new ArrayList<>();
+      for (int i = start; i < end; i++) {
+        final int j = i;
+        done.add(exec.submit(() -> initializeVcf(j, shardNo)));
+      }
+      // wait for all tasks to be done, check for exceptions.
+      for (Future<Boolean> d : done) {
+        try {
+          d.get();
+        } catch (ExecutionException e) {
+          Throwable inner = e.getCause();
+          if (inner instanceof IOException) {
+            throw (IOException) inner;
+          }
+          throw new RuntimeException("Unexpected exception while initializing", e);
+        }
+      }
+      exec.shutdown();
+      exec.awaitTermination(10, TimeUnit.SECONDS);
+    }
     initialized = true;
   }
 
   private boolean initializeVcf(int index, int shardNo) throws IOException {
     // TentativePos is always set in init, so non-null by the time we get here.
     Preconditions.<@Nullable Position>checkNotNull(tentativePos);
-    VcfReader reader = vcfs.get(index);
-    reader.offset(mindexes.get(index).get(shardNo));
+    VcfReader reader = vcfs[index];
+    if (null==reader) {
+      reader = new VcfReader(variantsPath.get(index), contigs, reference);
+      vcfs[index] = reader;
+    }
+    long offset = mindexes.get(index).get(shardNo);
+    reader.offset(offset);
     reader.advanceTo(tentativePos);
     return true;
   }
@@ -149,9 +176,9 @@ public class SafeCut implements AutoCloseable {
   public Position findSafeCut() throws IOException, InterruptedException {
     ensureInitialized();
     int parallelism = Math.min(1, threads);
-    int perWorker = (int) Math.ceil(vcfs.size() / (double) parallelism);
+    int perWorker = (int) Math.ceil(vcfs.length / (double) parallelism);
     ImmutableList.Builder<SubsetCutter> builder = ImmutableList.builder();
-    for (int start = 0; start < vcfs.size(); start += perWorker) {
+    for (int start = 0; start < vcfs.length; start += perWorker) {
       builder.add(new SubsetCutter(start, start + perWorker));
     }
     ImmutableList<SubsetCutter> cutters = builder.build();
@@ -185,7 +212,6 @@ public class SafeCut implements AutoCloseable {
           throw new RuntimeException("Unexpected exception while computing cut", e);
         }
       }
-      // Repeat until fixed point.
     } while (change);
     exec.shutdown();
     exec.awaitTermination(10, TimeUnit.SECONDS);
@@ -195,13 +221,15 @@ public class SafeCut implements AutoCloseable {
   /** Returns the offset to the line before the safe cut. */
   public ImmutableList<Long> getPreviousOffsets() {
     ensureInitialized();
-    return vcfs.stream().map(VcfReader::getPreviousOffset).collect(toImmutableList());
+    return Arrays.asList(vcfs).stream().map(VcfReader::getPreviousOffset).collect(toImmutableList());
   }
 
   @Override
   public void close() throws IOException {
     for (VcfReader reader : vcfs) {
-      reader.close();
+      if (null != reader) {
+        reader.close();
+      }
     }
   }
 
@@ -234,7 +262,7 @@ public class SafeCut implements AutoCloseable {
     /** Specifies the range of inputs to process. */
     SubsetCutter(int start, int endExcl) {
       this.start = start;
-      this.endExcl = Math.min(endExcl, vcfs.size());
+      this.endExcl = Math.min(endExcl, vcfs.length);
     }
 
     /** Finds a safe cut for a subset of the inputs. The safe cut is at or after tentativePos. */
@@ -242,7 +270,8 @@ public class SafeCut implements AutoCloseable {
       Position initialPos;
       do {
         initialPos = tentativePos;
-        for (VcfReader reader : vcfs.subList(start, endExcl)) {
+        for (int i=start; i<endExcl; i++) {
+          VcfReader reader = vcfs[i];
           reader.advanceToAtLeast(tentativePos);
           if (!reader.isEof()) {
             Position actual = reader.getPosition();

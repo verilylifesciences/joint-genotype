@@ -39,6 +39,8 @@ class Sharder {
   private Position beginCut;
   @Nullable private Position endCut;
   private ImmutableMap<String, Integer> contigs;
+  private boolean verbose;
+  private boolean skipWriting;
 
   /** Sets up the sharder. */
   Sharder(
@@ -60,6 +62,16 @@ class Sharder {
     this.reference = reference;
   }
 
+  public Sharder setVerbose(boolean verbose) {
+    this.verbose = verbose;
+    return this;
+  }
+
+  public Sharder skipWriting(boolean skipWriting) {
+    this.skipWriting = skipWriting;
+    return this;
+  }
+
   /** Copies the specified shard, optionally multithreaded. */
   public void shard(int shard, int threads)
       throws IOException, ParseException, InterruptedException {
@@ -70,9 +82,9 @@ class Sharder {
     initTime.reset();
     totalTime.reset();
     totalTime.start();
-    System.out.printf("Starting on shard %d\n", shard);
+    System.out.printf("Starting on shard %d.\n");
 
-    try (SafeCut safeCut = new SafeCut(shards, mindexes, vcfPaths, threads, reference)) {
+    try (SafeCut safeCut = new SafeCut(shards, mindexes, vcfPaths, threads, reference).setVerbose(verbose)) {
 
       int numShardsInFile = safeCut.numShards();
       checkArgument(
@@ -85,6 +97,9 @@ class Sharder {
 
       // 1. Find safe begin cut point.
       initTime.start();
+      if (verbose) {
+        System.out.println("Computing first cut");
+      }
       safeCut.init(shard * shardsAtATime);
       initTime.stop();
       beginCut = safeCut.findSafeCut();
@@ -95,11 +110,17 @@ class Sharder {
       if (endShard < totalShards * shardsAtATime) {
         // Normal case: find the safe cut.
         initTime.start();
+        if (verbose) {
+          System.out.println("computing second cut.");
+        }
         safeCut.init(endShard);
         initTime.stop();
         endCut = safeCut.findSafeCut();
         endOffsets = safeCut.getPreviousOffsets();
       } else {
+        if (verbose) {
+          System.out.println("No second cut, we go until end of file.");
+        }
         // Final shard: we'll copy until the end.
         ImmutableList.Builder<Long> builder = ImmutableList.builder();
         for (Path element : vcfPaths) {
@@ -112,36 +133,42 @@ class Sharder {
       System.out.printf(
           "Safe cut points found (%s - %s), cutting.\n", beginCut, (endCut == null ? "EOF" : endCut));
 
-      // 3. Copy shard, between the cut points.
-      writeTime.reset();
-      writeTime.start();
-      contigs = safeCut.contigs();
-      int perWorker = (int) Math.ceil(vcfPaths.size() / (double) threads);
-      ExecutorService exec =
-          Executors.newFixedThreadPool(threads, new ThreadFactoryBuilder().setDaemon(true).build());
-      ImmutableList.Builder<Future<Boolean>> doneBuilder = ImmutableList.builder();
-      for (int start = 0; start < vcfPaths.size(); start += perWorker) {
-        int sharderStart = start;
-        SubsetSharder worker = new SubsetSharder(sharderStart, sharderStart + perWorker);
-        doneBuilder.add(exec.submit(worker::copy));
-      }
-      ImmutableList<Future<Boolean>> done = doneBuilder.build();
-      for (Future<Boolean> doneYet : done) {
-        try {
-          doneYet.get();
-        } catch (ExecutionException x) {
-          if (x.getCause() instanceof IOException) {
-            throw (IOException) x.getCause();
-          }
-          if (x.getCause() instanceof ParseException) {
-            throw (ParseException) x.getCause();
-          }
-          throw new RuntimeException("Unexpected error", x);
+      if (!skipWriting) {
+        // 3. Copy shard, between the cut points.
+        writeTime.reset();
+        writeTime.start();
+        contigs = safeCut.contigs();
+        safeCut.close();
+        int perWorker = (int) Math.ceil(vcfPaths.size() / (double) threads);
+        ExecutorService exec =
+            Executors
+                .newFixedThreadPool(threads, new ThreadFactoryBuilder().setDaemon(true).build());
+        ImmutableList.Builder<Future<Boolean>> doneBuilder = ImmutableList.builder();
+        for (int start = 0; start < vcfPaths.size(); start += perWorker) {
+          int sharderStart = start;
+          SubsetSharder worker = new SubsetSharder(sharderStart, sharderStart + perWorker);
+          doneBuilder.add(exec.submit(worker::copy));
         }
+        ImmutableList<Future<Boolean>> done = doneBuilder.build();
+        for (Future<Boolean> doneYet : done) {
+          try {
+            doneYet.get();
+          } catch (ExecutionException x) {
+            if (x.getCause() instanceof IOException) {
+              throw (IOException) x.getCause();
+            }
+            if (x.getCause() instanceof ParseException) {
+              throw (ParseException) x.getCause();
+            }
+            throw new RuntimeException("Unexpected error", x);
+          }
+        }
+        exec.shutdown();
+        exec.awaitTermination(10, TimeUnit.SECONDS);
+        writeTime.stop();
+      } else {
+        System.out.println("Not saving the shard to disk, as requested.");
       }
-      exec.shutdown();
-      exec.awaitTermination(10, TimeUnit.SECONDS);
-      writeTime.stop();
       totalTime.stop();
       System.out.printf("Done writing %d shards.\n", vcfPaths.size());
 
@@ -187,9 +214,9 @@ class Sharder {
             StandardOpenOption.CREATE,
             StandardOpenOption.TRUNCATE_EXISTING)) {
       writer.write("{\n");
+      writer.write(String.format("  \"shard_number\": \"%s\"\n", shard));
       writer.write(String.format("  \"shards_total\": \"%s\"\n", totalShards));
       writer.write(String.format("  \"vcf_count\": \"%s\"\n", vcfPaths.size()));
-      writer.write(String.format("  \"shard_number\": \"%s\"\n", shard));
       writer.write(String.format("  \"threads\": \"%s\"\n", threads));
       writer.write(
           String.format("  \"begin_cut\": \"%s:%s\"\n", beginCut.contig(), beginCut.pos()));
@@ -209,12 +236,16 @@ class Sharder {
       writer.write(String.format("  \"total_s\": \"%s\"\n", totalTime.elapsed(TimeUnit.SECONDS)));
       // seek-safe-cut time not shown, but can be computed from the rest.
 
-      ImmutableList.Builder<Long> sizesBuilder = ImmutableList.builder();
-      for (Path p : outPaths) {
-        sizesBuilder.add(Files.size(p));
+      if (!skipWriting) {
+        ImmutableList.Builder<Long> sizesBuilder = ImmutableList.builder();
+        for (Path p : outPaths) {
+          sizesBuilder.add(Files.size(p));
+        }
+        saveOffsetMetric(writer, "shard_size", sizesBuilder.build());
+        writer.write(String.format("  \"ref_queried\": \"%d\"\n", reference.getQueryCount()));
+      } else {
+        writer.write("  \"write_skipped\": \"true\"\n");
       }
-      saveOffsetMetric(writer, "shard_size", sizesBuilder.build());
-      writer.write(String.format("  \"ref_queried\": \"%d\"\n", reference.getQueryCount()));
       writer.write("}\n");
     }
   }

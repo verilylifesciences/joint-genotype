@@ -58,6 +58,11 @@ public class VcfReader implements AutoCloseable {
     this.reference = reference;
   }
 
+  public void semiClose() {
+    input = null;
+  }
+
+
   /**
    * Seek into the file.
    *
