@@ -46,6 +46,7 @@ class Sharder {
   Sharder(
       Path shards,
       ImmutableList<Path> mindexes,
+
       ImmutableList<Path> vcfPaths,
       int totalShards,
       ImmutableList<Path> outPaths,

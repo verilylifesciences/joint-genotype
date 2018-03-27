@@ -1,0 +1,7 @@
+# Comments are OK
+chr1	10	1000	chr2	50	499
+# We can have comments in there.
+# Even in the middle.
+chr2	500	1000
+# Past the end
+chrM	1	1

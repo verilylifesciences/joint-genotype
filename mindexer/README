@@ -7,6 +7,10 @@ BUILDING
 
 $ mvn package
 
+TESTING
+
+$ mvn test
+
 RUNNING
 
 $ java -jar target/Mindexer-1.0-SNAPSHOT-jar-with-dependencies.jar
