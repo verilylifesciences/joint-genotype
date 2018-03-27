@@ -28,8 +28,8 @@ The options are listed in Main.java. Here they are again:
     --reference: FASTA file for the reference. Must be on the local disk.
     --output_folder: Folder for the output files. Their names are derived from the vcf file name.
     --threads: Number of threads for IO. Also enables parallel init if > 1.
-    --metrics: Path for the metrics file. 
-       
+    --metrics: Path for the metrics file.
+
 BUILDING
 
 First build the non-Maven dependencies:
@@ -42,6 +42,12 @@ $ cd ../sharder
 Then build Sharder:
 
 $ mvn package
+
+TESTING
+
+To test, follow the building steps above at least once, then:
+
+$ mvn test
 
 RUNNING
 

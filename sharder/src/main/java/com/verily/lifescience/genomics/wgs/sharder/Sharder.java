@@ -82,7 +82,7 @@ class Sharder {
     initTime.reset();
     totalTime.reset();
     totalTime.start();
-    System.out.printf("Starting on shard %d.\n");
+    System.out.printf("Starting on shard %d.\n", shard);
 
     try (SafeCut safeCut = new SafeCut(shards, mindexes, vcfPaths, threads, reference).setVerbose(verbose)) {
 
@@ -166,11 +166,11 @@ class Sharder {
         exec.shutdown();
         exec.awaitTermination(10, TimeUnit.SECONDS);
         writeTime.stop();
+        System.out.printf("Done writing %d shards.\n", vcfPaths.size());
       } else {
-        System.out.println("Not saving the shard to disk, as requested.");
+        System.out.printf("Done. Not writing the %d shards to disk, as requested.\n", vcfPaths.size());
       }
       totalTime.stop();
-      System.out.printf("Done writing %d shards.\n", vcfPaths.size());
 
       // empty metrics file name -> don't save metrics
       if (!metricsPath.toString().isEmpty()) {
