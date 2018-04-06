@@ -144,6 +144,11 @@ public class VcfReader implements AutoCloseable {
   /** Parses the record, returns its position. */
   public Position parsePosition(String line) {
     String[] elements = line.split("\t", 3);
+    if (elements.length<2) {
+      // You may get this error if the index or mindex was wrong, so you jump partway into a record.
+      // This would happen if e.g. you change the header after the fact.
+      throw new IllegalArgumentException("Expected at least 2 tab-separated fields, got " + elements.length + " in '" + line + "'.");
+    }
     return Position.of(elements[0], Integer.valueOf(elements[1]), contigs);
   }
 

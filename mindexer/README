@@ -13,4 +13,5 @@ $ mvn test
 
 RUNNING
 
-$ java -jar target/Mindexer-1.0-SNAPSHOT-jar-with-dependencies.jar
+$ java -jar target/Mindexer-1.0-SNAPSHOT-jar-with-dependencies.jar \
+    $shardsfile $indexfile $shardcount $output_file

@@ -52,3 +52,5 @@ $ mvn test
 RUNNING
 
 $ java -jar target/Sharder-1.0-SNAPSHOT-jar-with-dependencies.jar
+
+(see src/main/java/com/verily/lifescience/genomics/wgs/sharder/Main.java for the list of parameters)

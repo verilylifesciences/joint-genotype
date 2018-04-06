@@ -101,7 +101,8 @@ public abstract class Position implements Comparable<Position> {
       throws ParseException {
     // expected: CONTIG\tSTART_POSITION\tEND_POSITION\tCONTIG2 ...
     // or # comment
-    if (line.startsWith("#")) {
+    // (or empty line at the end)
+    if (line.length()==0 || line.startsWith("#")) {
       return null;
     }
     String[] elems = checkAndSplit(line);
@@ -111,7 +112,7 @@ public abstract class Position implements Comparable<Position> {
   private static ImmutableList<String> parseContigs(String line) throws ParseException {
     // expected: CONTIG\tSTART_POSITION\tEND_POSITION\tCONTIG2 ...
     // or # comment
-    if (line.startsWith("#")) {
+    if (line.length()==0 || line.startsWith("#")) {
       return ImmutableList.of();
     }
     String[] elems = checkAndSplit(line);

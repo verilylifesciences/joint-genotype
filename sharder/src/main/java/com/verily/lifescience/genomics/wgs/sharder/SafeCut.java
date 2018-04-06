@@ -158,6 +158,12 @@ public class SafeCut implements AutoCloseable {
   private boolean initializeVcf(int index, int shardNo) throws IOException {
     // TentativePos is always set in init, so non-null by the time we get here.
     Preconditions.<@Nullable Position>checkNotNull(tentativePos);
+    checkArgument(
+      index<variantsPath.size(), 
+      "Cannot initialize file " + index + ", we only have " + variantsPath + " vcfs.");
+    checkArgument(
+      index<variantsPath.size(), 
+      "Cannot initialize file " + index + ", we only have " + mindexes + " mindexes.");
     VcfReader reader = vcfs[index];
     if (null==reader) {
       reader = new VcfReader(variantsPath.get(index), contigs, reference);

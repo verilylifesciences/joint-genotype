@@ -62,6 +62,9 @@ public class Mindex {
     if (cachedOffsets == null || index < 0 || index >= this.cachedOffsets.length) {
       loadMindex(shardToGet);
       index = 0;
+    }   
+    if (cachedOffsets == null || index < 0 || index >= this.cachedOffsets.length) {
+      throw new RuntimeException("Cannot get shard " + index + ", we only found " + cachedOffsets.length + " data.");
     }
     return cachedOffsets[index];
   }

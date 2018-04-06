@@ -93,17 +93,20 @@ class Sharder {
           "'shards_total' must be at most the number of rows in the shards file");
       checkArgument(
           numShardsInFile % totalShards == 0,
-          "'shards_total' must be a divisor of the number of rows in the shards file");
+          "'shards_total' must be a divisor of the number of rows in the shards file. Got " + totalShards + ", there are " + numShardsInFile + " shards in the file.");
       int shardsAtATime = numShardsInFile / totalShards;
 
       // 1. Find safe begin cut point.
       initTime.start();
       if (verbose) {
-        System.out.println("Computing first cut");
+        System.out.println("Computing first cut.");
       }
       safeCut.init(shard * shardsAtATime);
       initTime.stop();
       beginCut = safeCut.findSafeCut();
+      if (verbose) {
+        System.out.println("  First cut: " + beginCut);
+      }
       beginOffsets = safeCut.getPreviousOffsets();
 
       // 2. Find safe end cut point.
