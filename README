@@ -22,5 +22,11 @@ an input to the Sharder.
 
 3) Run Sharder and GATK GenotypeGVCF for each shard. This can be done in parallel.
 
+The sharder outputs do not include headers so you'll have to put them back on
+for GATK to work. Make sure that the sample name in the CHROM line is correct
+for each sample.
+
 4) Concatenate the GenotypeGVCF outputs. The resulting file is your final
    output.
+
+For concatenation, remove the headers from all but the first file.
