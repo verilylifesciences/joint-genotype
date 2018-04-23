@@ -1,4 +1,4 @@
-SHARDER
+# SHARDER
 
 The Sharder, given a shard number, will grab that shard from every input VCF.
 The inputs may be on Google Cloud Storage.
@@ -7,6 +7,7 @@ So for example if you ask for shard 0, you will get the first part of each of
 the inputs.
 
 This is useful for the following reasons:
+
  - a shard is smaller than the full input, so GenotypeGVCF will finish sooner.
  - no need to copy potentially large inputs to more than one worker computer,
    each worker only grabs the part they need.
@@ -18,6 +19,7 @@ one left off.
 
 The options are listed in Main.java. Here they are again:
 
+```
     --shards_file: Path to TSV file that describes each shard
     --shard_number: Index of the shard to cut (starts at 0)
     --shards_total: Total number of shards for the input file (even though we only write one)
@@ -29,28 +31,38 @@ The options are listed in Main.java. Here they are again:
     --output_folder: Folder for the output files. Their names are derived from the vcf file name.
     --threads: Number of threads for IO. Also enables parallel init if > 1.
     --metrics: Path for the metrics file.
+```
 
-BUILDING
+## BUILDING
 
 First build the non-Maven dependencies:
 
+```
 $ ./install-genomewarp.sh
 $ cd ../mindexer
 $ mvn install
 $ cd ../sharder
+```
 
 Then build Sharder:
 
+```
 $ mvn package
+```
 
-TESTING
+## TESTING
 
 To test, follow the building steps above at least once, then:
 
+```
 $ mvn test
+```
 
-RUNNING
+## RUNNING
 
+```
 $ java -jar target/Sharder-1.0-SNAPSHOT-jar-with-dependencies.jar
+```
 
 (see src/main/java/com/verily/lifescience/genomics/wgs/sharder/Main.java for the list of parameters)
+
