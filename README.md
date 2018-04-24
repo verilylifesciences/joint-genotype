@@ -2,7 +2,8 @@
 
 ## ABOUT
 
-A package to speed up GATK genotyping by sharding the inputs into tiny pieces.
+A package to speed up GATK joint genotyping by sharding the inputs into tiny
+pieces.
 
 ## BUILDING
 

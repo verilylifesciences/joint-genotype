@@ -4,13 +4,15 @@
 # pick_shards.py will pick split points at evently-spaced genomic locations.
 # It uses the input's header to determine the size of each contig.
 #
-# The format is the following. Each line is a shard.
-# Each shard is a tab-separated sequence of intervals.
-# Each interval is written as `contig` <TAB> `start pos (included)` <TAB> `end pos (included)`
-#
 # example usage:
 #
 # $ python pick_shards.py 20000 ~/mydata/large_sample.g.vcf > shards_file
+#
+# Here, "20000" is the desired number of shards.
+#
+# The output format is the following. Each line is a shard.
+# Each shard is a tab-separated sequence of intervals.
+# Each interval is written as `contig` <TAB> `start pos (included)` <TAB> `end pos (included)`
 #
 
 import sys
@@ -41,14 +43,13 @@ for line in open(infile):
 
 total_length = sum(length[k] for k in length)
 total_length_of_normal = sum(length[k] for k in length if len(k)<=len('chr19'))
-#print 'we have %s contigs.' % len(length.keys())
-#print '%s total length\n%s in "normal" contigs' % (total_length, total_length_of_normal)
 shard_length = total_length / nshards
 # how many base pairs we need to put in this shard
 left = shard_length
 shard_index = 0
 total_sofar = 0
 s = []
+# Take bases from the contigs, until we have enough, then emit a shard.
 for contig in contigs:
   start = 1
   while True:
