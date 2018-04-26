@@ -1,3 +1,7 @@
 # Ignore intelliJ files
 */.idea/
 */*.iml
+# Ignore generated files
+sharder/target/*
+mindexer/target/*
+shards_picker/*.pyc
